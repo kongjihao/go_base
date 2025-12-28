@@ -5,7 +5,7 @@ package main
 // 这样我们导入自己的代码package时就不需要从$GOPATH/src后面写起，而是直接从 项目/xxx/写包名 即可
 import (
 	"fmt"
-	heihei "learnProject02/src/code/packageMgr/calc" // 给包起别名
+	heihei "go_base/code/packageMgr/calc" // 给包起别名
 )
 
 func main() {

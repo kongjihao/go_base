@@ -3,8 +3,8 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"go_base/code/socket/tcp_sticky_packet/proto"
 	"io"
-	"learnProject02/src/code/socket/tcp_sticky_packet/proto"
 	"net"
 )
 

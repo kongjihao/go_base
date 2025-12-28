@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"learnProject02/src/code/socket/tcp_sticky_packet/proto"
+	"go_base/code/socket/tcp_sticky_packet/proto"
 	"net"
 )
 
