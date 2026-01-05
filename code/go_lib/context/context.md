@@ -2,7 +2,7 @@
 要理解 Context 的必要性，首先得回到 Go 的并发场景痛点—— 原文开篇就点出了核心问题：在 Go 的 HTTP 服务中，一个请求会启动 1 个主 goroutine 处理，而这个主 goroutine 可能会再启动多个子 goroutine（比如调用数据库、RPC 服务、缓存等）。这些 goroutine 共享 “同一个请求的资源”（如用户 Token、请求超时时间），且需要同步响应 “请求取消 / 超时” 信号（比如用户关掉浏览器、请求超时），否则子 goroutine 会一直占用资源，导致内存泄漏。
 原文通过 3 种 “失败方案” 的对比，凸显了 Context 的不可替代性：
 1. 方案 1：无控制（硬编码循环）
-``` 
+``` go
 func worker() {
     for { // 死循环，无法退出
         fmt.Println("worker")
@@ -12,7 +12,7 @@ func worker() {
 ```
 问题：子 goroutine 启动后完全失控，即使主程序想停止，也没有办法通知它退出，最终导致 goroutine 泄漏。
 2. 方案 2：全局变量控制
-``` 
+``` go
 var exit bool // 全局变量标记退出
 func worker() {
     for {
@@ -28,7 +28,7 @@ func worker() {
 - 跨包调用时，全局变量难以统一管理（多个请求同时修改会冲突）；
 - 若 worker 再启动子 goroutine（如worker2），全局变量无法传递退出信号，深层 goroutine 仍会泄漏。
 3. 方案 3：通道（Channel）控制
-``` 
+``` go
 func worker(exitChan chan struct{}) {
     LOOP:for {
             fmt.Println("worker")
@@ -67,7 +67,7 @@ Context 是一个接口，所有 Context 对象都必须实现以下 4 个方法
 - 作用：衍生一个可 “主动触发取消” 的子 Context，返回子 Context 和取消函数（CancelFunc）。
 - 核心逻辑：调用CancelFunc时，子 Context 的Done()通道关闭，所有监听该通道的 goroutine 会收到取消信号；同时，该子 Context 衍生的所有孙 Context 也会被取消（树形传递）。
 示例（原文核心代码）：
-``` 
+``` go
 func worker(ctx context.Context) {
 LOOP:for {
         fmt.Println("worker")
@@ -97,6 +97,7 @@ func main() {// 从根Context衍生可取消的子Context
 - 作用：衍生一个 “到指定时间自动取消” 的子 Context（也可主动调用CancelFunc提前取消）。
 - 核心逻辑：若父 Context 的截止时间比当前设置的更早，则子 Context 会继承父的截止时间；否则到指定时间后，子 Context 自动取消。
 示例（原文代码）：
+``` go
 func main() {
     // 设置截止时间：当前时间+50毫秒
     deadline := time.Now().Add(50 * time.Millisecond)
@@ -110,11 +111,13 @@ func main() {
         fmt.Println(ctx.Err()) // 输出：context deadline exceeded
     }
 }
+```
 （3）WithTimeout：超时时间控制
 - 作用：是WithDeadline的 “简化版”，直接设置 “超时时长”（如 3 秒后取消），无需手动计算截止时间。
 - 本质：WithTimeout(parent, timeout) = WithDeadline(parent, time.Now().Add(timeout))。
 典型场景：数据库查询超时、HTTP 请求超时（原文后续的 “客户端超时示例” 就是核心应用）。
 示例（原文代码）：
+``` go
 func main() {// 设置50毫秒超时：超时后自动取消
     ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
     defer cancel()
@@ -124,6 +127,7 @@ func main() {// 设置50毫秒超时：超时后自动取消
     time.Sleep(5 * time.Second)
     
 }
+```
 
 （4）WithValue：请求域数据传递
 - 作用：衍生一个 “附着键值对数据” 的子 Context，用于传递 “请求相关的临时数据”（如用户 Token、TraceID）。
@@ -132,7 +136,7 @@ func main() {// 设置50毫秒超时：超时后自动取消
   2. 不用于传递 “函数可选参数”，仅传递 “请求域的必要数据”（如跨 goroutine 共享的用户身份信息）；
   3. 数据传递是 “只读” 的，子 Context 无法修改父 Context 的数据，只能新增自己的数据。
 示例（原文代码）：
-``` 
+``` go
 // 1. 定义自定义类型的key（避免与其他包冲突）
 type TraceCode string
 
@@ -181,7 +185,7 @@ func main() {
 3. 启动 goroutine 执行 HTTP 请求，同时监听 Context 的Done()通道；
 4. 若超时（ctx.Done()触发），则直接取消请求，避免资源浪费。
 关键代码片段：
-``` 
+``` go
 func doCall(ctx context.Context) {
     client := http.Client{
         Transport: &http.Transport{DisableKeepAlives: true},
